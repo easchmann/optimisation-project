@@ -34,7 +34,6 @@ def _assert_valid_result(result: AlgoResult, G: nx.Graph) -> None:
 # GA / GAE
 # ---------------------------------------------------------------------------
 
-@pytest.mark.skip(reason="not yet implemented")
 class TestGA:
     def test_returns_algo_result(self) -> None:
         G = small_graph()
