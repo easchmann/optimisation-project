@@ -73,6 +73,14 @@ def run(
     gamma: float = p["gamma"]
     n_stall: int = p["n_stall"]
 
+    if k_max < 1:
+        raise ValueError(f"k_max must be >= 1, got {k_max}")
+    if k_max == 1:
+        colours = {v: 1 for v in G.nodes()}
+        violations = sum(1 for u, v in G.edges() if colours[u] == colours[v])
+        return AlgoResult(coloring=colours, k_used=1, violations=violations,
+                          runtime_s=0.0, fitness_history=[])
+
     rng = np.random.default_rng(seed)
     nodes = sorted(G.nodes())
     n = len(nodes)
