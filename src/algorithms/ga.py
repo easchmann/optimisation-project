@@ -1,4 +1,12 @@
-"""Genetic Algorithm (GA) and GA with Elitism (GAE) for graph colouring."""
+"""Genetic Algorithm (GA) and GA with Elitism (GAE) for graph colouring.
+
+Note on randomness: DEAP's built-in operators (cxTwoPoint, mutUniformInt,
+selTournament) call Python's stdlib `random` module internally, so this module
+seeds `random` rather than using np.random.default_rng.  This is the only
+sanctioned exception to the project's numpy-RNG convention.  Do not
+parallelise calls to run() without re-seeding between calls; Python's `random`
+is global state.
+"""
 
 from __future__ import annotations
 
@@ -97,8 +105,6 @@ def run(
     t_size: int = p["t_size"]
     elitism: bool = p["elitism"]
 
-    # DEAP's operators (cxTwoPoint, mutUniformInt, selTournament) use Python's
-    # random module internally, so we seed it here for full reproducibility.
     random.seed(seed)
 
     nodes = sorted(G.nodes())

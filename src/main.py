@@ -12,26 +12,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 import networkx as nx
 
 from algorithms import aco, ga, sa
+from config import ALGO_PARAMS
 from fitness import AlgoResult, chromatic_gap
 from graph_utils import brute_force_timed, dsatur, make_random_graph
-
-# ── Tuned defaults from CLAUDE.md defaults table ─────────────────────────────
-ALGO_PARAMS: dict[str, dict] = {
-    "ga": {
-        "n_pop": 100, "p_cx": 0.5, "p_mut": 0.2, "p_ind": 0.05,
-        "n_gen": 200, "n_elite": 3, "t_size": 4, "elitism": False,
-    },
-    "gae": {
-        "n_pop": 100, "p_cx": 0.5, "p_mut": 0.2, "p_ind": 0.05,
-        "n_gen": 200, "n_elite": 3, "t_size": 4, "elitism": True,
-    },
-    "aco": {
-        "n_ants": 50, "alpha": 1.0, "beta": 3.0, "rho": 0.2, "n_iter": 300,
-    },
-    "sa": {
-        "T0": 100.0, "gamma": 0.995, "n_step": None, "n_stall": 500,
-    },
-}
 
 BF_MAX_N = 10
 

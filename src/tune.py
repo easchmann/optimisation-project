@@ -12,25 +12,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from algorithms import aco, ga, sa
+from config import ALGO_PARAMS as BASE_PARAMS
 from graph_utils import dsatur, make_random_graph
 
 RESULTS_DIR = Path(__file__).parent.parent / "results" / "tuning"
 TUNE_P = 0.5
-
-# ── Defaults from CLAUDE.md ───────────────────────────────────────────────────
-BASE_PARAMS: dict[str, dict] = {
-    "ga": {
-        "n_pop": 100, "p_cx": 0.5, "p_mut": 0.2, "p_ind": 0.05,
-        "n_gen": 200, "n_elite": 3, "t_size": 4, "elitism": False,
-    },
-    "aco": {
-        "n_ants": 50, "alpha": 1.0, "beta": 3.0, "rho": 0.2,
-        "Q": 1.0, "tau_min": 0.01, "n_iter": 300,
-    },
-    "sa": {
-        "T0": 100.0, "gamma": 0.995, "n_step": None, "n_stall": 500, "n_max": None,
-    },
-}
 
 # OFAT sweep definitions: list of (varied_param, values).
 # "alpha_beta" is a joint sweep; values are (alpha, beta) tuples.
@@ -40,18 +26,24 @@ SWEEPS: dict[str, list[tuple[str, list]]] = {
         ("p_cx",   [0.4, 0.6, 0.8]),
         ("t_size", [2, 3, 4, 6]),
     ],
+    "gae": [
+        ("p_mut",   [0.05, 0.1, 0.2, 0.3]),
+        ("n_elite", [1, 3, 5, 10]),
+        ("t_size",  [2, 3, 4, 6]),
+    ],
     "aco": [
         ("rho",        [0.1, 0.2, 0.3, 0.5]),
         ("alpha_beta", [(1.0, 2.0), (1.0, 3.0), (2.0, 3.0), (1.0, 5.0)]),
         ("n_ants",     [20, 50, 100]),
     ],
     "sa": [
-        ("gamma", [0.90, 0.95, 0.99, 0.999]),
-        ("T0",    [10.0, 50.0, 200.0, 500.0]),
+        ("gamma",  [0.90, 0.95, 0.99, 0.999]),
+        ("T0",     [10.0, 50.0, 200.0, 500.0]),
+        ("n_stall", [100, 250, 500, 1000]),
     ],
 }
 
-_RUN: dict[str, object] = {"ga": ga.run, "aco": aco.run, "sa": sa.run}
+_RUN: dict[str, object] = {"ga": ga.run, "gae": ga.run, "aco": aco.run, "sa": sa.run}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -181,7 +173,7 @@ def _print_summary(algo: str, gaps: dict[tuple[str, str], list[float]]) -> None:
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments."""
     p = argparse.ArgumentParser(description="OFAT hyperparameter sweep.")
-    p.add_argument("--algo", required=True, choices=["ga", "aco", "sa"])
+    p.add_argument("--algo", required=True, choices=["ga", "gae", "aco", "sa"])
     p.add_argument("--reps", type=int, default=10, help="Repetitions per setting")
     p.add_argument("--ns",   type=int, nargs="+", default=[40, 50, 60],
                    help="Graph sizes (space-separated)")

@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from algorithms import aco, ga, sa
+from config import ALGO_PARAMS as _ALGO_PARAMS
 from graph_utils import dsatur, make_random_graph
 
 FIGURES_DIR = Path(__file__).parent.parent / "results" / "figures"
@@ -28,15 +29,6 @@ ALGO_MARKERS: dict[str, str] = {
 }
 META_ALGOS = ["ga", "gae", "aco", "sa"]   # metaheuristics only (exclude baselines)
 
-_ALGO_PARAMS: dict[str, dict] = {
-    "ga":  {"n_pop": 100, "p_cx": 0.5, "p_mut": 0.2, "p_ind": 0.05,
-            "n_gen": 200, "n_elite": 3, "t_size": 4, "elitism": False},
-    "gae": {"n_pop": 100, "p_cx": 0.5, "p_mut": 0.2, "p_ind": 0.05,
-            "n_gen": 200, "n_elite": 3, "t_size": 4, "elitism": True},
-    "aco": {"n_ants": 50, "alpha": 1.0, "beta": 3.0, "rho": 0.2,
-            "Q": 1.0, "tau_min": 0.01, "n_iter": 300},
-    "sa":  {"T0": 100.0, "gamma": 0.995, "n_step": None, "n_stall": 500, "n_max": None},
-}
 _RUNNERS = [("ga", ga.run, "ga"), ("gae", ga.run, "gae"),
             ("aco", aco.run, "aco"), ("sa", sa.run, "sa")]
 
@@ -139,14 +131,25 @@ def run_convergence_experiment() -> dict[str, list[float]]:
 
 
 def plot_convergence_n100(out_dir: Path) -> None:
-    """convergence_n100.png: fitness history per algo on G(n=100, p=0.5, seed=0)."""
+    """convergence_n100.png: fitness history per algo on G(n=100, p=0.5, seed=0).
+
+    The x-axis is normalised to 0–100 % of each algorithm's own budget so that
+    convergence *shape* can be compared fairly.  Raw iteration counts differ:
+    GA records one point per generation (200 total), ACO one per outer iteration
+    (300), SA one per n_step-move block (200).  Absolute wall-clock speed is
+    shown separately in avg_runtime.png.
+    """
     print("Running convergence experiment on G(n=100, p=0.5, seed=0) ...")
     histories = run_convergence_experiment()
     fig, ax = plt.subplots(figsize=(8, 5))
     for algo, hist in histories.items():
-        ax.plot(hist, label=algo.upper(), color=ALGO_COLORS[algo], alpha=0.85)
+        if not hist:
+            continue
+        pct = [100.0 * i / (len(hist) - 1) for i in range(len(hist))]
+        ax.plot(pct, hist, label=algo.upper(), color=ALGO_COLORS[algo], alpha=0.85)
     ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=9)
-    _style(ax, "Convergence at n=100", "Generation / Iteration", "Best Fitness F")
+    _style(ax, "Convergence at n=100 (normalised budget)",
+           "% of algorithm budget", "Best Fitness F")
     _save(fig, "convergence_n100.png", out_dir)
 
 
