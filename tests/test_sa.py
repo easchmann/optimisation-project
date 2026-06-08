@@ -95,7 +95,7 @@ class TestMaybeRestart:
         best = np.array([1, 2, 3], dtype=np.int32)
         c_out, T_out, s_out = _maybe_restart(colours, best, stall_count=5, n_stall=5, T=20.0, T0=100.0)
         assert np.array_equal(c_out, best)
-        assert T_out == pytest.approx(10.0)   # T0 * 0.1
+        assert T_out == pytest.approx(100.0)   # reset to T0
         assert s_out == 0
 
     def test_does_not_trigger_below_threshold(self) -> None:

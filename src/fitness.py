@@ -37,13 +37,16 @@ def fitness(coloring: dict[int, int], G: nx.Graph) -> float:
 
 
 def chromatic_gap(k_used: int, chi: int) -> int:
-    """Compute gap between colours used and true chromatic number.
+    """Compute gap between colours used and a reference colouring count.
 
     Args:
         k_used: Number of colours used by the algorithm.
-        chi: True (or reference) chromatic number χ(G).
+        chi: Reference colour count — the true χ(G) or a heuristic result
+            (e.g. DSATUR).  When chi is a heuristic, the gap may be negative
+            if the algorithm finds a better colouring.
 
     Returns:
-        Non-negative integer gap; 0 means optimal.
+        Integer gap (k_used - chi); 0 means equal to reference, negative means
+        better than reference.
     """
     return k_used - chi

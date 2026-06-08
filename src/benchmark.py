@@ -95,7 +95,9 @@ def run_benchmark(
             k_max = n
             for p in ps:
                 for rep in range(reps):
-                    seed = rep
+                    # Encode (n, p, rep) into a unique seed; avoids correlated
+                    # graphs across different (n, p) conditions.
+                    seed = rep + n * 1_000 + round(p * 10) * 100_000
                     t_start = time.perf_counter()
                     G = make_random_graph(n, p, seed)
 
@@ -105,6 +107,8 @@ def run_benchmark(
                     ds_time = time.perf_counter() - t0
                     dsatur_k = len(set(ds_col.values()))
                     ds_viol = sum(1 for u, v in G.edges() if ds_col[u] == ds_col[v])
+                    if ds_viol:
+                        logging.error("DSATUR produced %d violations on n=%d p=%s rep=%d", ds_viol, n, p, rep)
 
                     # ── Brute force (small n only) ────────────────────────────
                     # Run BF before writing DSATUR row so gap_bf is available.
@@ -181,10 +185,12 @@ def parse_args() -> argparse.Namespace:
                    default=[20, 30, 40, 50, 75, 100, 150, 200])
     p.add_argument("--reps", type=int,   default=20)
     p.add_argument("--ps",   type=float, nargs="+", default=[0.3, 0.5, 0.7])
+    p.add_argument("--out",  type=Path,  default=None,
+                   help="Output CSV path (default: auto-timestamped)")
     return p.parse_args()
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.ERROR, format="%(levelname)s %(message)s")
     args = parse_args()
-    run_benchmark(args.ns, args.ps, args.reps)
+    run_benchmark(args.ns, args.ps, args.reps, out_path=args.out)

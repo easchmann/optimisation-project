@@ -8,7 +8,6 @@ from itertools import product
 from pathlib import Path
 
 import networkx as nx
-import numpy as np
 
 
 # ---------------------------------------------------------------------------
@@ -27,8 +26,7 @@ def make_random_graph(n: int, p: float, seed: int) -> nx.Graph:
     Returns:
         An undirected NetworkX graph.
     """
-    rng = np.random.default_rng(seed)
-    return nx.erdos_renyi_graph(n, p, seed=int(rng.integers(2**31)))
+    return nx.erdos_renyi_graph(n, p, seed=seed)
 
 
 def load_dimacs(path: Path) -> nx.Graph:

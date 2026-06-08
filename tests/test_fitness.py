@@ -58,8 +58,12 @@ class TestChromaticGap:
     def test_suboptimal(self) -> None:
         assert chromatic_gap(5, 3) == 2
 
-    def test_gap_non_negative(self) -> None:
-        assert chromatic_gap(4, 3) >= 0
+    def test_gap_positive_when_suboptimal(self) -> None:
+        assert chromatic_gap(4, 3) == 1
+
+    def test_gap_negative_when_beats_reference(self) -> None:
+        # Algorithm finds a better colouring than a heuristic reference
+        assert chromatic_gap(2, 3) == -1
 
 
 class TestAlgoResult:
