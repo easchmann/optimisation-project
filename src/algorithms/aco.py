@@ -88,7 +88,7 @@ def _update_pheromone(
         Updated pheromone matrix (same object, also returned for convenience).
     """
     tau *= 1.0 - rho
-    deposit = Q / f_best
+    deposit = Q / max(f_best, 1e-9)
     for pos, c in enumerate(best_colours):
         tau[pos, c - 1] += deposit
     np.clip(tau, tau_min, None, out=tau)
@@ -103,9 +103,9 @@ def run(
 ) -> AlgoResult:
     """Run Ant Colony Optimisation on the graph colouring problem.
 
-    Each iteration all ants construct a full colouring by visiting vertices in
-    the same randomly-shuffled order.  Pheromone is evaporated globally then
-    deposited only by the best ant of that iteration.
+    Each iteration all ants construct a full colouring, each visiting vertices
+    in its own independently-shuffled order.  Pheromone is evaporated globally
+    then deposited only by the best ant of that iteration.
 
     Args:
         G: The graph to colour.

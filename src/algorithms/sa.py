@@ -31,16 +31,16 @@ def _maybe_restart(
     Args:
         colours: Current colour assignment (not mutated).
         best_colours: Best-known colour assignment.
-        stall_count: Consecutive moves without improvement in best F.
+        stall_count: Consecutive accepted moves without improvement in best F.
         n_stall: Threshold that triggers a restart.
         T: Current temperature.
-        T0: Initial temperature; restart sets T = T0 * 0.1.
+        T0: Initial temperature; restart resets T = T0.
 
     Returns:
         (new_colours, new_T, new_stall_count) — new_colours is a fresh copy.
     """
     if stall_count >= n_stall:
-        return best_colours.copy(), T0 * 0.1, 0
+        return best_colours.copy(), T0, 0
     return colours.copy(), T, stall_count
 
 
@@ -55,8 +55,8 @@ def run(
     Starts from a random colouring drawn uniformly from {1,...,k_max}^n.
     Each move reassigns one random vertex to a different colour, then applies
     Metropolis acceptance.  Temperature is multiplied by gamma every n_step
-    moves.  If best F shows no improvement for n_stall consecutive moves the
-    current solution is reset to best-so-far and T is dropped to T0*0.1.
+    moves.  If best F shows no improvement for n_stall consecutive accepted
+    moves the current solution is reset to best-so-far and T is reset to T0.
 
     Args:
         G: The graph to colour.
@@ -156,7 +156,7 @@ def run(
             best_violations = violations
             best_k_used = k_used
             stall_count = 0
-        else:
+        elif accept:
             stall_count += 1
 
         # --- restart if stalled ---
