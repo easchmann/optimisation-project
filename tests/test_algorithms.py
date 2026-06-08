@@ -94,7 +94,6 @@ class TestACO:
 # SA
 # ---------------------------------------------------------------------------
 
-@pytest.mark.skip(reason="not yet implemented")
 class TestSA:
     def test_returns_algo_result(self) -> None:
         G = small_graph()
