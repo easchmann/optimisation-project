@@ -146,12 +146,11 @@ def run(
     t0 = time.perf_counter()
 
     for _ in range(n_iter):
-        order = rng.permutation(n)  # one shuffle shared by all ants this iteration
-
         iter_best_colours: np.ndarray | None = None
         iter_best_f = float("inf")
 
         for _ in range(n_ants):
+            order = rng.permutation(n)  # each ant explores its own vertex order
             colours = _construct(nodes, nb_idx, tau, alpha, beta, k_max, order, rng)
             coloring = {nodes[i]: int(colours[i]) for i in range(n)}
             f = _fitness(coloring, G)
@@ -169,7 +168,8 @@ def run(
 
     runtime_s = time.perf_counter() - t0
 
-    assert best_colours_global is not None
+    if best_colours_global is None:
+        raise RuntimeError("ACO produced no solution — n_iter must be >= 1")
     coloring = {nodes[i]: int(best_colours_global[i]) for i in range(n)}
     k_used = len(set(coloring.values()))
     violations = sum(1 for u, v in G.edges() if coloring[u] == coloring[v])
