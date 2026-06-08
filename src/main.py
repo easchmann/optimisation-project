@@ -33,7 +33,7 @@ ALGO_PARAMS: dict[str, dict] = {
     },
 }
 
-BF_MAX_N = 15
+BF_MAX_N = 10
 
 # Column widths: Algorithm | Colours | Violations | Gap vs DSATUR | Runtime (s)
 _W = (12, 9, 11, 15, 12)
@@ -152,7 +152,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--n",    type=int,   default=50,    help="Number of vertices")
     p.add_argument("--p",    type=float, default=0.5,   help="Edge probability")
     p.add_argument("--seed", type=int,   default=42,    help="Random seed")
-    p.add_argument("--k_max", type=int,  default=20,    help="Maximum colours")
+    p.add_argument("--k_max", type=int,  default=None,  help="Maximum colours (default: n)")
     p.add_argument(
         "--algo", default="all",
         choices=["ga", "gae", "aco", "sa", "dsatur", "bf", "all"],
@@ -169,10 +169,11 @@ def main() -> None:
     G = make_random_graph(args.n, args.p, args.seed)
     print(f"Graph: n={G.number_of_nodes()}, m={G.number_of_edges()}, p={args.p}")
 
+    k_max = args.k_max if args.k_max is not None else args.n
     dsatur_ref = _run_dsatur(G)
     print(f"DSATUR reference: k={dsatur_ref.k_used}\n")
 
-    rows = _collect_rows(args.algo, G, args.k_max, args.seed, dsatur_ref)
+    rows = _collect_rows(args.algo, G, k_max, args.seed, dsatur_ref)
 
     print(_header())
     print(_divider())

@@ -16,7 +16,7 @@ from algorithms import aco, ga, sa
 from graph_utils import brute_force_timed, dsatur, make_random_graph
 
 RESULTS_DIR = Path(__file__).parent.parent / "results" / "benchmark"
-BF_MAX_N = 15
+BF_MAX_N = 10
 
 # ── CLAUDE.md default params ──────────────────────────────────────────────────
 ALGO_PARAMS: dict[str, dict] = {
