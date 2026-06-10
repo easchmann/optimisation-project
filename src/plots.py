@@ -8,6 +8,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+import matplotlib
+matplotlib.use("Agg")  # non-interactive backend; safe on headless cluster nodes
 import matplotlib.pyplot as plt
 import pandas as pd
 
