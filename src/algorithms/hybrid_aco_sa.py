@@ -116,7 +116,7 @@ def run_aco_sa(
         if refined_k < best_f:
             best_f = refined_k
             best_colours = refined.copy()
-            print(f" improved to {best_f} colours", end="", flush=True)
+            #print(f" improved to {best_f} colours", end="", flush=True)
         
         # Cool down for next restart
         sa_T0 *= 0.9  # Slightly lower starting temp each restart
