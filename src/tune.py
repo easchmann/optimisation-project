@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from algorithms import aco, ga, sa
+from algorithms import aco, ga, sa, hybrid_ga_sa, hybrid_aco_sa
 from config import ALGO_PARAMS as BASE_PARAMS
 from graph_utils import dsatur, make_random_graph
 
@@ -38,6 +38,9 @@ TUNE_P = 0.5
 #   HYBRID_GA_SA: New algorithm combining GA and SA. Parameters chosen based on
 #                 GA/GAE sweeps plus SA refinement parameters. Lower T0 since
 #                 SA is only doing local refinement, not global exploration.
+#   HYBRID_ACO_SA: Hybrid combining ACO and SA. ACO finds good solutions,
+#                 SA refines them. Parameters chosen based on ACO sweeps plus
+#                 SA refinement parameters.
 SWEEPS: dict[str, list[tuple[str, list]]] = {
     "ga": [
         ("p_mut",  [0.2, 0.3, 0.4, 0.5]),        # shifted up: was monotone at 0.3
@@ -75,6 +78,19 @@ SWEEPS: dict[str, list[tuple[str, list]]] = {
         ("sa_refine_fraction", [0.05, 0.10, 0.15, 0.20]),
         ("sa_steps_factor", [25, 50, 75, 100]),    # multiplier for n (sa_steps = factor * n)
     ],
+    "hybrid_aco_sa": [
+        # ACO parameters (inherited from ACO sweeps)
+        ("aco_ants",     [20, 30, 50, 75]),
+        ("aco_iter",     [30, 50, 75, 100]),
+        ("aco_alpha",    [1.0, 1.5, 2.0, 2.5]),
+        ("aco_beta",     [3.0, 5.0, 7.0, 10.0]),
+        ("aco_rho",      [0.1, 0.2, 0.3, 0.5]),
+        # SA refinement parameters
+        ("sa_T0",        [5.0, 10.0, 20.0, 40.0]),  # Higher than GA-SA for more exploration
+        ("sa_gamma",     [0.90, 0.95, 0.99, 0.999]),
+        ("sa_restarts",  [1, 2, 3, 5]),
+        ("sa_steps_factor", [50, 75, 100, 150]),    # multiplier for n
+    ],
 }
 
 _RUN: dict[str, object] = {
@@ -82,7 +98,8 @@ _RUN: dict[str, object] = {
     "gae": ga.run,
     "aco": aco.run,
     "sa": sa.run,
-    "hybrid_ga_sa": hybrid_ga_sa.run,  # Need to import this
+    "hybrid_ga_sa": hybrid_ga_sa.run,
+    "hybrid_aco_sa": hybrid_aco_sa.run_aco_sa,
 }
 
 
@@ -104,7 +121,20 @@ def _make_params(algo: str, varied_param: str, value: object) -> dict:
         params["alpha"], params["beta"] = value  # type: ignore[misc]
     elif varied_param == "sa_steps_factor":
         # Special handling: sa_steps_factor determines sa_steps at runtime
-        params["sa_steps"] = int(value) * 50  # assuming n≈50 in tests
+        # For GA-SA, use n≈50 in tests; for ACO-SA, use n≈50 as well
+        params["sa_steps"] = int(value) * 50
+    elif varied_param in ["aco_ants", "aco_iter", "aco_alpha", "aco_beta", "aco_rho"]:
+        # Map ACO parameter names to the correct parameter names
+        if varied_param == "aco_ants":
+            params["n_ants"] = int(value)
+        elif varied_param == "aco_iter":
+            params["n_iter"] = int(value)
+        elif varied_param == "aco_alpha":
+            params["alpha"] = float(value)
+        elif varied_param == "aco_beta":
+            params["beta"] = float(value)
+        elif varied_param == "aco_rho":
+            params["rho"] = float(value)
     else:
         params[varied_param] = value
     return params
@@ -149,7 +179,7 @@ def run_tune(
     DSATUR, records the gap.
 
     Args:
-        algo: Algorithm to sweep (ga, gae, aco, sa, hybrid_ga_sa).
+        algo: Algorithm to sweep (ga, gae, aco, sa, hybrid_ga_sa, hybrid_aco_sa).
         ns: Graph sizes to include.
         reps: Repetitions per (n, varied_param, param_value).
         out_path: Override output CSV path (default: auto-timestamped).
@@ -200,16 +230,27 @@ def run_tune(
                 for rep in range(reps):
                     G = make_random_graph(n, TUNE_P, seed=rep)
                     dsatur_k = len(set(dsatur(G).values()))
-                    result = run_fn(G, n, params, seed=rep)  # type: ignore[operator]
-                    gap = result.k_used - dsatur_k
-                    gaps[(varied_param, pval)].append(float(gap))
-                    writer.writerow({
-                        "algo": algo, "n": n,
-                        "varied_param": varied_param, "param_value": pval,
-                        "rep": rep, "k_used": result.k_used,
-                        "dsatur_k": dsatur_k, "gap": gap,
-                        "runtime_s": f"{result.runtime_s:.4f}",
-                    })
+                    try:
+                        result = run_fn(G, n, params, seed=rep)  # type: ignore[operator]
+                        gap = result.k_used - dsatur_k
+                        gaps[(varied_param, pval)].append(float(gap))
+                        writer.writerow({
+                            "algo": algo, "n": n,
+                            "varied_param": varied_param, "param_value": pval,
+                            "rep": rep, "k_used": result.k_used,
+                            "dsatur_k": dsatur_k, "gap": gap,
+                            "runtime_s": f"{result.runtime_s:.4f}",
+                        })
+                    except Exception as exc:
+                        print(f"\n    Warning: {algo} n={n} rep={rep} failed: {exc}")
+                        # Write a row with nan values
+                        writer.writerow({
+                            "algo": algo, "n": n,
+                            "varied_param": varied_param, "param_value": pval,
+                            "rep": rep, "k_used": "nan",
+                            "dsatur_k": dsatur_k, "gap": "nan",
+                            "runtime_s": "nan",
+                        })
                     count += 1
             fh.flush()
             print(f" done ({count} runs)")
@@ -236,8 +277,14 @@ def _print_summary(algo: str, gaps: dict[tuple[str, str], list[float]]) -> None:
     for (varied_param, pval), gap_list in gaps.items():
         if prev is not None and prev != varied_param:
             print(f"  {'':─<{sum(W) + 6}}")
-        mean = sum(gap_list) / len(gap_list)
-        print(f"  {varied_param:<{W[0]}}  {pval:<{W[1]}}  {mean:>{W[2]}.3f}")
+        # Filter out nan values before computing mean
+        valid_gaps = [g for g in gap_list if isinstance(g, (int, float)) and not isinstance(g, str)]
+        if valid_gaps:
+            mean = sum(valid_gaps) / len(valid_gaps)
+            mean_str = f"{mean:.3f}"
+        else:
+            mean_str = "N/A"
+        print(f"  {varied_param:<{W[0]}}  {pval:<{W[1]}}  {mean_str:>{W[2]}}")
         prev = varied_param
     print(f"  {bar}")
 
@@ -248,7 +295,7 @@ def parse_args() -> argparse.Namespace:
     """Parse CLI arguments."""
     p = argparse.ArgumentParser(description="OFAT hyperparameter sweep.")
     p.add_argument("--algo",  required=True, 
-                   choices=["ga", "gae", "aco", "sa", "hybrid_ga_sa"])
+                   choices=["ga", "gae", "aco", "sa", "hybrid_ga_sa", "hybrid_aco_sa"])
     p.add_argument("--reps",  type=int, default=10, help="Repetitions per setting")
     p.add_argument("--ns",    type=int, nargs="+", default=[40, 50, 60],
                    help="Graph sizes (space-separated)")

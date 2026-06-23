@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from algorithms import aco, ga, sa, hybrid_ga_sa
+from algorithms import aco, ga, sa, hybrid_ga_sa, hybrid_aco_sa
 from config import ALGO_PARAMS
 from graph_utils import brute_force_timed, dsatur, make_random_graph
 
@@ -24,6 +24,7 @@ _RUNNERS: list[tuple[str, object, str]] = [
     ("aco", aco.run, "aco"),
     ("sa",  sa.run,  "sa"),
     ("hybrid_ga_sa", hybrid_ga_sa.run, "hybrid_ga_sa"),
+    ("hybrid_aco_sa", hybrid_aco_sa.run_aco_sa, "hybrid_aco_sa"),
 ]
 
 _FIELDNAMES = [
@@ -154,13 +155,24 @@ def run_benchmark(
                                 result.k_used, result.violations,
                                 gap_ds, gap_bf, result.runtime_s,
                             ))
-                            progress.append(f"{algo_name}={result.k_used}({gap_ds:+d})")
+                            # Shorten hybrid names for display
+                            display_name = algo_name
+                            if algo_name == "hybrid_ga_sa":
+                                display_name = "h-ga-sa"
+                            elif algo_name == "hybrid_aco_sa":
+                                display_name = "h-aco-sa"
+                            progress.append(f"{display_name}={result.k_used}({gap_ds:+d})")
                         except Exception as exc:
                             logging.error(
                                 "%s n=%d p=%s rep=%d: %s", algo_name, n, p, rep, exc
                             )
                             writer.writerow(_nan_row(algo_name, n, p, rep, seed))
-                            progress.append(f"{algo_name}=err")
+                            display_name = algo_name
+                            if algo_name == "hybrid_ga_sa":
+                                display_name = "h-ga-sa"
+                            elif algo_name == "hybrid_aco_sa":
+                                display_name = "h-aco-sa"
+                            progress.append(f"{display_name}=err")
 
                     fh.flush()
                     done += 1

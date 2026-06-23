@@ -38,4 +38,16 @@ ALGO_PARAMS: dict[str, dict] = {
         #"sa_gamma": 0.95,
         #"sa_refine_fraction": 0.05, 
     },
+    "hybrid_aco_sa": {
+        "aco_iter": 100,
+        "aco_ants": 50,
+        "aco_alpha": 2.0,
+        "aco_beta": 5.0,
+        "aco_rho": 0.2,
+        "aco_Q": 1.0,
+        "sa_steps": None,      # 100*n at runtime
+        "sa_T0": 20.0,
+        "sa_gamma": 0.99,
+        "sa_restarts": 3,
+    },
 }
