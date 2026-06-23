@@ -1,5 +1,4 @@
 """Generate all result figures from the benchmark CSV."""
-
 from __future__ import annotations
 
 import argparse
@@ -13,7 +12,7 @@ matplotlib.use("Agg")  # non-interactive backend; safe on headless cluster nodes
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from algorithms import aco, ga, sa
+from algorithms import aco, ga, sa, hybrid_ga_sa
 from config import ALGO_PARAMS as _ALGO_PARAMS
 from graph_utils import dsatur, make_random_graph
 
@@ -23,16 +22,34 @@ DPI = 300
 
 # ── Consistent style per algorithm across all figures ─────────────────────────
 ALGO_COLORS: dict[str, str] = {
-    "ga": "#1f77b4", "gae": "#ff7f0e", "aco": "#2ca02c",
-    "sa": "#d62728", "dsatur": "#9467bd", "bf": "#8c564b",
+    "ga": "#1f77b4",      # blue
+    "gae": "#ff7f0e",     # orange
+    "aco": "#2ca02c",     # green
+    "sa": "#d62728",      # red
+    "hybrid_ga_sa": "#9467bd",  # purple - distinct from others
+    "dsatur": "#8c564b",  # brown
+    "bf": "#e377c2",      # pink
 }
 ALGO_MARKERS: dict[str, str] = {
-    "ga": "o", "gae": "s", "aco": "^", "sa": "D", "dsatur": "x", "bf": "+",
+    "ga": "o",
+    "gae": "s",
+    "aco": "^",
+    "sa": "D",
+    "hybrid_ga_sa": "*",  # star marker - stands out
+    "dsatur": "x",
+    "bf": "+",
 }
-META_ALGOS = ["ga", "gae", "aco", "sa"]   # metaheuristics only (exclude baselines)
+# Metaheuristics only (exclude baselines)
+# Added hybrid_ga_sa to the list
+META_ALGOS = ["ga", "gae", "aco", "sa", "hybrid_ga_sa"]
 
-_RUNNERS = [("ga", ga.run, "ga"), ("gae", ga.run, "gae"),
-            ("aco", aco.run, "aco"), ("sa", sa.run, "sa")]
+_RUNNERS = [
+    ("ga", ga.run, "ga"),
+    ("gae", ga.run, "gae"),
+    ("aco", aco.run, "aco"),
+    ("sa", sa.run, "sa"),
+    ("hybrid_ga_sa", hybrid_ga_sa.run, "hybrid_ga_sa"),
+]
 
 
 # ── Shared helpers ────────────────────────────────────────────────────────────
@@ -70,6 +87,8 @@ def plot_avg_gap_vs_n(df: pd.DataFrame, out_dir: Path) -> None:
     fig, ax = plt.subplots(figsize=(8, 5))
     for algo in META_ALGOS:
         g = sub[sub["algo"] == algo].groupby("n")["gap_dsatur"]
+        if g.mean().empty:
+            continue
         ax.errorbar(g.mean().index, g.mean(), yerr=g.std(),
                     label=algo.upper(), color=ALGO_COLORS[algo],
                     marker=ALGO_MARKERS[algo], capsize=3)
@@ -85,9 +104,14 @@ def plot_gap_vs_bf_small_n(df: pd.DataFrame, out_dir: Path) -> None:
     sub = df[df["algo"].isin(META_ALGOS)].copy()
     sub["gap_bf"] = pd.to_numeric(sub["gap_bf"], errors="coerce")
     sub = sub.dropna(subset=["gap_bf"])
+    if sub.empty:
+        print("Warning: No gap_bf data found; skipping plot_gap_vs_bf_small_n")
+        return
     fig, ax = plt.subplots(figsize=(7, 5))
     for algo in META_ALGOS:
         g = sub[sub["algo"] == algo].groupby("n")["gap_bf"]
+        if g.mean().empty:
+            continue
         ax.errorbar(g.mean().index, g.mean(), yerr=g.std(),
                     label=algo.upper(), color=ALGO_COLORS[algo],
                     marker=ALGO_MARKERS[algo], capsize=3)
@@ -103,7 +127,9 @@ def plot_avg_runtime(df: pd.DataFrame, out_dir: Path) -> None:
     sub = df.copy()
     sub["runtime_s"] = pd.to_numeric(sub["runtime_s"], errors="coerce")
     fig, ax = plt.subplots(figsize=(8, 5))
-    for algo in ["dsatur", "bf"] + META_ALGOS:
+    # Include all algorithms: baselines + metaheuristics + hybrid
+    all_algos = ["dsatur", "bf"] + META_ALGOS
+    for algo in all_algos:
         g = sub[sub["algo"] == algo].groupby("n")["runtime_s"].mean()
         if g.empty:
             continue
@@ -127,8 +153,14 @@ def run_convergence_experiment() -> dict[str, list[float]]:
     G = make_random_graph(100, 0.5, seed=0)
     histories: dict[str, list[float]] = {}
     for name, run_fn, pkey in _RUNNERS:
-        result = run_fn(G, 100, _ALGO_PARAMS[pkey], seed=0)  # type: ignore[operator]
-        histories[name] = result.fitness_history
+        print(f"  Running {name} for convergence...", end="", flush=True)
+        try:
+            result = run_fn(G, 100, _ALGO_PARAMS[pkey], seed=0)  # type: ignore[operator]
+            histories[name] = result.fitness_history
+            print(f" done ({len(result.fitness_history)} points)")
+        except Exception as e:
+            print(f" failed: {e}")
+            histories[name] = []
     return histories
 
 
@@ -138,17 +170,23 @@ def plot_convergence_n100(out_dir: Path) -> None:
     The x-axis is normalised to 0–100 % of each algorithm's own budget so that
     convergence *shape* can be compared fairly.  Raw iteration counts differ:
     GA records one point per generation (200 total), ACO one per outer iteration
-    (300), SA one per n_step-move block (200).  Absolute wall-clock speed is
-    shown separately in avg_runtime.png.
+    (300), SA one per n_step-move block (200), Hybrid one per generation (150).
+    Absolute wall-clock speed is shown separately in avg_runtime.png.
     """
     print("Running convergence experiment on G(n=100, p=0.5, seed=0) ...")
     histories = run_convergence_experiment()
     fig, ax = plt.subplots(figsize=(8, 5))
+    
+    # Filter out empty histories
     for algo, hist in histories.items():
         if not hist:
             continue
         pct = [100.0 * i / (len(hist) - 1) for i in range(len(hist))]
-        ax.plot(pct, hist, label=algo.upper(), color=ALGO_COLORS[algo], alpha=0.85)
+        ax.plot(pct, hist, label=algo.upper(), 
+                color=ALGO_COLORS.get(algo, "gray"), 
+                marker=ALGO_MARKERS.get(algo, ""),
+                markersize=3, markevery=len(hist)//10, alpha=0.85)
+    
     ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=9)
     _style(ax, "Convergence at n=100 (normalised budget)",
            "% of algorithm budget", "Best Fitness F")
@@ -164,6 +202,8 @@ def plot_std_dev_gap(df: pd.DataFrame, out_dir: Path) -> None:
     fig, ax = plt.subplots(figsize=(8, 5))
     for algo in META_ALGOS:
         g = sub[sub["algo"] == algo].groupby("n")["gap_dsatur"].std()
+        if g.empty:
+            continue
         ax.plot(g.index, g, label=algo.upper(),
                 color=ALGO_COLORS[algo], marker=ALGO_MARKERS[algo])
     ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=9)
@@ -180,7 +220,8 @@ def plot_density_sweep(
 ) -> None:
     """density_sweep.png: mean gap_dsatur vs edge density at fixed n=75.
 
-    Runs the 4 metaheuristics directly (does not read from CSV).
+    Runs the metaheuristics directly (does not read from CSV).
+    Includes the hybrid algorithm.
     """
     if ps is None:
         ps = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
@@ -199,26 +240,126 @@ def plot_density_sweep(
                     pass
         print()
     sweep = pd.DataFrame(records)
+    
+    if sweep.empty:
+        print("Warning: No data collected for density sweep")
+        return
+        
     fig, ax = plt.subplots(figsize=(8, 5))
     for algo in META_ALGOS:
         g = sweep[sweep["algo"] == algo].groupby("p")["gap"].mean()
+        if g.empty:
+            continue
         ax.plot(g.index, g, label=algo.upper(),
-                color=ALGO_COLORS[algo], marker=ALGO_MARKERS[algo])
+                color=ALGO_COLORS.get(algo, "gray"), 
+                marker=ALGO_MARKERS.get(algo, "o"))
     ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=9)
     _style(ax, "Effect of Graph Density (n=75)", "Edge density p", "Mean gap vs. DSATUR")
     _save(fig, "density_sweep.png", out_dir)
 
 
+# ── Figure 7: hybrid_comparison (NEW) ────────────────────────────────────────
+
+def plot_hybrid_comparison(df: pd.DataFrame, out_dir: Path) -> None:
+    """hybrid_comparison.png: Direct comparison of hybrid vs all other algorithms.
+    
+    Shows the relative improvement of the hybrid over each algorithm.
+    """
+    sub = df[df["algo"].isin(META_ALGOS)].copy()
+    sub["gap_dsatur"] = pd.to_numeric(sub["gap_dsatur"], errors="coerce")
+    
+    # Get hybrid data
+    hybrid_data = sub[sub["algo"] == "hybrid_ga_sa"].groupby("n")["gap_dsatur"].mean()
+    if hybrid_data.empty:
+        print("Warning: No hybrid data found; skipping plot_hybrid_comparison")
+        return
+    
+    fig, ax = plt.subplots(figsize=(8, 5))
+    
+    # Plot each algorithm's gap as a line
+    for algo in META_ALGOS:
+        if algo == "hybrid_ga_sa":
+            continue
+        g = sub[sub["algo"] == algo].groupby("n")["gap_dsatur"].mean()
+        if g.empty:
+            continue
+        # Plot as thin, semi-transparent lines for comparison
+        ax.plot(g.index, g, label=algo.upper(),
+                color=ALGO_COLORS[algo], marker=ALGO_MARKERS[algo],
+                alpha=0.5, linestyle="--")
+    
+    # Plot hybrid as bold, prominent line
+    ax.plot(hybrid_data.index, hybrid_data, label="HYBRID_GA_SA",
+            color=ALGO_COLORS["hybrid_ga_sa"], marker=ALGO_MARKERS["hybrid_ga_sa"],
+            linewidth=3, markersize=10)
+    
+    ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=9)
+    _style(ax, "Hybrid Algorithm Performance Comparison", 
+           "n", "Mean gap vs. DSATUR")
+    _save(fig, "hybrid_comparison.png", out_dir)
+
+
+# ── Figure 8: hybrid_improvement (NEW) ───────────────────────────────────────
+
+def plot_hybrid_improvement(df: pd.DataFrame, out_dir: Path) -> None:
+    """hybrid_improvement.png: Percentage improvement of hybrid over each algorithm."""
+    sub = df[df["algo"].isin(META_ALGOS)].copy()
+    sub["gap_dsatur"] = pd.to_numeric(sub["gap_dsatur"], errors="coerce")
+    
+    # Get hybrid data
+    hybrid_data = sub[sub["algo"] == "hybrid_ga_sa"].groupby("n")["gap_dsatur"].mean()
+    if hybrid_data.empty:
+        print("Warning: No hybrid data found; skipping plot_hybrid_improvement")
+        return
+    
+    fig, ax = plt.subplots(figsize=(8, 5))
+    
+    for algo in META_ALGOS:
+        if algo == "hybrid_ga_sa":
+            continue
+        g = sub[sub["algo"] == algo].groupby("n")["gap_dsatur"].mean()
+        if g.empty:
+            continue
+        
+        # Calculate improvement: (other_gap - hybrid_gap) / other_gap * 100
+        # Only for common n values
+        common_n = g.index.intersection(hybrid_data.index)
+        if len(common_n) == 0:
+            continue
+        
+        improvement = []
+        for n in common_n:
+            other_gap = g.loc[n]
+            hybrid_gap = hybrid_data.loc[n]
+            if other_gap > 0:
+                imp = (other_gap - hybrid_gap) / other_gap * 100
+            else:
+                # If other_gap is 0, hybrid should also be 0 for perfect performance
+                imp = 0.0 if hybrid_gap == 0 else 100.0
+            improvement.append(imp)
+        
+        ax.plot(common_n, improvement, label=f"vs {algo.upper()}",
+                color=ALGO_COLORS[algo], marker=ALGO_MARKERS[algo])
+    
+    ax.axhline(y=0, color="black", linestyle="-", linewidth=0.5, alpha=0.5)
+    ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=9)
+    _style(ax, "Hybrid Algorithm: Percentage Improvement Over Others",
+           "n", "Improvement (%)")
+    _save(fig, "hybrid_improvement.png", out_dir)
+
+
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    """Generate all 6 figures. Convergence and density sweep are skippable."""
+    """Generate all 8 figures. Convergence and density sweep are skippable."""
     p = argparse.ArgumentParser(description="Generate result figures.")
     p.add_argument("--csv", type=Path, default=None, help="Path to benchmark CSV")
     p.add_argument("--skip-convergence", action="store_true",
                    help="Skip the convergence experiment (saves ~15s)")
     p.add_argument("--skip-density", action="store_true",
                    help="Skip the density sweep (saves several minutes)")
+    p.add_argument("--skip-hybrid-plots", action="store_true",
+                   help="Skip hybrid-specific comparison plots")
     args = p.parse_args()
 
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
@@ -226,14 +367,22 @@ def main() -> None:
     print(f"Reading {csv_path}")
     df = pd.read_csv(csv_path)
 
+    # Standard plots
     plot_avg_gap_vs_n(df, FIGURES_DIR)
     plot_gap_vs_bf_small_n(df, FIGURES_DIR)
     plot_avg_runtime(df, FIGURES_DIR)
     plot_std_dev_gap(df, FIGURES_DIR)
+    
+    # Optional experiments
     if not args.skip_convergence:
         plot_convergence_n100(FIGURES_DIR)
     if not args.skip_density:
         plot_density_sweep(FIGURES_DIR)
+    
+    # Hybrid-specific plots (new)
+    if not args.skip_hybrid_plots:
+        plot_hybrid_comparison(df, FIGURES_DIR)
+        plot_hybrid_improvement(df, FIGURES_DIR)
 
 
 if __name__ == "__main__":

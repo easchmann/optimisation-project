@@ -35,6 +35,9 @@ TUNE_P = 0.5
 #   SA T0:        low T0 (10) appeared best on n=20 but data was too thin
 #                 to trust → re-swept on proper n range.
 #   SA n_stall:   no prior data; [100,1000] spans the meaningful range.
+#   HYBRID_GA_SA: New algorithm combining GA and SA. Parameters chosen based on
+#                 GA/GAE sweeps plus SA refinement parameters. Lower T0 since
+#                 SA is only doing local refinement, not global exploration.
 SWEEPS: dict[str, list[tuple[str, list]]] = {
     "ga": [
         ("p_mut",  [0.2, 0.3, 0.4, 0.5]),        # shifted up: was monotone at 0.3
@@ -59,9 +62,28 @@ SWEEPS: dict[str, list[tuple[str, list]]] = {
         ("T0",     [10.0, 50.0, 100.0, 200.0]),   # re-sweep with proper n range
         ("n_stall", [100, 250, 500, 1000]),
     ],
+    "hybrid_ga_sa": [
+        # GA parameters (inherited from GA/GAE sweeps)
+        ("p_mut",   [0.2, 0.3, 0.4, 0.5]),
+        ("p_cx",    [0.6, 0.7, 0.8, 0.9]),
+        ("p_ind",   [0.01, 0.02, 0.05, 0.1]),
+        ("n_elite", [1, 3, 5, 10]),
+        ("t_size",  [3, 4, 5, 6]),
+        # SA refinement parameters (new for hybrid)
+        ("sa_T0",   [1.0, 5.0, 10.0, 20.0]),       # lower than standalone SA
+        ("sa_gamma", [0.90, 0.95, 0.99, 0.999]),
+        ("sa_refine_fraction", [0.05, 0.10, 0.15, 0.20]),
+        ("sa_steps_factor", [25, 50, 75, 100]),    # multiplier for n (sa_steps = factor * n)
+    ],
 }
 
-_RUN: dict[str, object] = {"ga": ga.run, "gae": ga.run, "aco": aco.run, "sa": sa.run}
+_RUN: dict[str, object] = {
+    "ga": ga.run,
+    "gae": ga.run,
+    "aco": aco.run,
+    "sa": sa.run,
+    "hybrid_ga_sa": hybrid_ga_sa.run,  # Need to import this
+}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -80,6 +102,9 @@ def _make_params(algo: str, varied_param: str, value: object) -> dict:
     params = dict(BASE_PARAMS[algo])
     if varied_param == "alpha_beta":
         params["alpha"], params["beta"] = value  # type: ignore[misc]
+    elif varied_param == "sa_steps_factor":
+        # Special handling: sa_steps_factor determines sa_steps at runtime
+        params["sa_steps"] = int(value) * 50  # assuming n≈50 in tests
     else:
         params[varied_param] = value
     return params
@@ -124,7 +149,7 @@ def run_tune(
     DSATUR, records the gap.
 
     Args:
-        algo: Algorithm to sweep (ga, gae, aco, sa).
+        algo: Algorithm to sweep (ga, gae, aco, sa, hybrid_ga_sa).
         ns: Graph sizes to include.
         reps: Repetitions per (n, varied_param, param_value).
         out_path: Override output CSV path (default: auto-timestamped).
@@ -222,7 +247,8 @@ def _print_summary(algo: str, gaps: dict[tuple[str, str], list[float]]) -> None:
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments."""
     p = argparse.ArgumentParser(description="OFAT hyperparameter sweep.")
-    p.add_argument("--algo",  required=True, choices=["ga", "gae", "aco", "sa"])
+    p.add_argument("--algo",  required=True, 
+                   choices=["ga", "gae", "aco", "sa", "hybrid_ga_sa"])
     p.add_argument("--reps",  type=int, default=10, help="Repetitions per setting")
     p.add_argument("--ns",    type=int, nargs="+", default=[40, 50, 60],
                    help="Graph sizes (space-separated)")

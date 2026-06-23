@@ -1,5 +1,4 @@
 """Full benchmark sweep across graph sizes and algorithms."""
-
 from __future__ import annotations
 
 import argparse
@@ -12,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from algorithms import aco, ga, sa
+from algorithms import aco, ga, sa, hybrid_ga_sa
 from config import ALGO_PARAMS
 from graph_utils import brute_force_timed, dsatur, make_random_graph
 
@@ -24,6 +23,7 @@ _RUNNERS: list[tuple[str, object, str]] = [
     ("gae", ga.run,  "gae"),
     ("aco", aco.run, "aco"),
     ("sa",  sa.run,  "sa"),
+    ("hybrid_ga_sa", hybrid_ga_sa.run, "hybrid_ga_sa"),
 ]
 
 _FIELDNAMES = [
