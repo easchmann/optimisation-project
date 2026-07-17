@@ -13,7 +13,7 @@ matplotlib.use("Agg")  # non-interactive backend; safe on headless cluster nodes
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from algorithms import aco, ga, sa
+from algorithms import aco, ga, hybrid_aco_sa, hybrid_ga_sa, sa
 from config import ALGO_PARAMS as _ALGO_PARAMS
 from graph_utils import dsatur, make_random_graph
 
@@ -23,16 +23,24 @@ DPI = 300
 
 # ── Consistent style per algorithm across all figures ─────────────────────────
 ALGO_COLORS: dict[str, str] = {
-    "ga": "#1f77b4", "gae": "#ff7f0e", "aco": "#2ca02c",
-    "sa": "#d62728", "dsatur": "#9467bd", "bf": "#8c564b",
+    "ga": "#1f77b4", "gae": "#ff7f0e", "aco": "#2ca02c", "sa": "#d62728",
+    "hybrid_ga_sa": "#e377c2", "hybrid_aco_sa": "#17becf",
+    "dsatur": "#9467bd", "bf": "#8c564b",
 }
 ALGO_MARKERS: dict[str, str] = {
-    "ga": "o", "gae": "s", "aco": "^", "sa": "D", "dsatur": "x", "bf": "+",
+    "ga": "o", "gae": "s", "aco": "^", "sa": "D",
+    "hybrid_ga_sa": "*", "hybrid_aco_sa": "P",
+    "dsatur": "x", "bf": "+",
 }
-META_ALGOS = ["ga", "gae", "aco", "sa"]   # metaheuristics only (exclude baselines)
+# metaheuristics only (exclude baselines)
+META_ALGOS = ["ga", "gae", "aco", "sa", "hybrid_ga_sa", "hybrid_aco_sa"]
 
-_RUNNERS = [("ga", ga.run, "ga"), ("gae", ga.run, "gae"),
-            ("aco", aco.run, "aco"), ("sa", sa.run, "sa")]
+_RUNNERS = [
+    ("ga", ga.run, "ga"), ("gae", ga.run, "gae"),
+    ("aco", aco.run, "aco"), ("sa", sa.run, "sa"),
+    ("hybrid_ga_sa", hybrid_ga_sa.run, "hybrid_ga_sa"),
+    ("hybrid_aco_sa", hybrid_aco_sa.run, "hybrid_aco_sa"),
+]
 
 
 # ── Shared helpers ────────────────────────────────────────────────────────────
@@ -70,6 +78,8 @@ def plot_avg_gap_vs_n(df: pd.DataFrame, out_dir: Path) -> None:
     fig, ax = plt.subplots(figsize=(8, 5))
     for algo in META_ALGOS:
         g = sub[sub["algo"] == algo].groupby("n")["gap_dsatur"]
+        if g.mean().empty:
+            continue
         ax.errorbar(g.mean().index, g.mean(), yerr=g.std(),
                     label=algo.upper(), color=ALGO_COLORS[algo],
                     marker=ALGO_MARKERS[algo], capsize=3)
@@ -85,9 +95,14 @@ def plot_gap_vs_bf_small_n(df: pd.DataFrame, out_dir: Path) -> None:
     sub = df[df["algo"].isin(META_ALGOS)].copy()
     sub["gap_bf"] = pd.to_numeric(sub["gap_bf"], errors="coerce")
     sub = sub.dropna(subset=["gap_bf"])
+    if sub.empty:
+        print("Warning: No gap_bf data found; skipping plot_gap_vs_bf_small_n")
+        return
     fig, ax = plt.subplots(figsize=(7, 5))
     for algo in META_ALGOS:
         g = sub[sub["algo"] == algo].groupby("n")["gap_bf"]
+        if g.mean().empty:
+            continue
         ax.errorbar(g.mean().index, g.mean(), yerr=g.std(),
                     label=algo.upper(), color=ALGO_COLORS[algo],
                     marker=ALGO_MARKERS[algo], capsize=3)

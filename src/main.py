@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import networkx as nx
 
-from algorithms import aco, ga, sa
+from algorithms import aco, ga, hybrid_aco_sa, hybrid_ga_sa, sa
 from config import ALGO_PARAMS
 from fitness import AlgoResult, chromatic_gap
 from graph_utils import brute_force_timed, dsatur, make_random_graph
@@ -90,7 +90,10 @@ def _collect_rows(
     """
     n = G.number_of_nodes()
     dsatur_k = dsatur_ref.k_used
-    targets = ["dsatur", "bf", "ga", "gae", "aco", "sa"] if algo == "all" else [algo]
+    targets = (
+        ["dsatur", "bf", "ga", "gae", "aco", "sa", "hybrid_ga_sa", "hybrid_aco_sa"]
+        if algo == "all" else [algo]
+    )
 
     rows: list[tuple[str, AlgoResult | None, int | None, str | None]] = []
 
@@ -124,6 +127,14 @@ def _collect_rows(
             result = sa.run(G, k_max, ALGO_PARAMS["sa"], seed=seed)
             rows.append(("SA", result, chromatic_gap(result.k_used, dsatur_k), None))
 
+        elif name == "hybrid_ga_sa":
+            result = hybrid_ga_sa.run(G, k_max, ALGO_PARAMS["hybrid_ga_sa"], seed=seed)
+            rows.append(("HYBRID_GA_SA", result, chromatic_gap(result.k_used, dsatur_k), None))
+
+        elif name == "hybrid_aco_sa":
+            result = hybrid_aco_sa.run(G, k_max, ALGO_PARAMS["hybrid_aco_sa"], seed=seed)
+            rows.append(("HYBRID_ACO_SA", result, chromatic_gap(result.k_used, dsatur_k), None))
+
     return rows
 
 
@@ -138,7 +149,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--k_max", type=int,  default=None,  help="Maximum colours (default: n)")
     p.add_argument(
         "--algo", default="all",
-        choices=["ga", "gae", "aco", "sa", "dsatur", "bf", "all"],
+        choices=["ga", "gae", "aco", "sa", "hybrid_ga_sa", "hybrid_aco_sa", "dsatur", "bf", "all"],
         help="Algorithm to run (default: all)",
     )
     return p.parse_args()

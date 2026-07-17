@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from algorithms import aco, ga, sa
+from algorithms import aco, ga, hybrid_aco_sa, hybrid_ga_sa, sa
 from config import ALGO_PARAMS as BASE_PARAMS
 from graph_utils import dsatur, make_random_graph
 
@@ -35,6 +35,12 @@ TUNE_P = 0.5
 #   SA T0:        low T0 (10) appeared best on n=20 but data was too thin
 #                 to trust → re-swept on proper n range.
 #   SA n_stall:   no prior data; [100,1000] spans the meaningful range.
+#   HYBRID_GA_SA: new algorithm combining GA and SA. GA params reuse the
+#                 GA/GAE sweep ranges; sa_T0 is lower than standalone SA since
+#                 this SA phase only does local refinement, not global search.
+#   HYBRID_ACO_SA: new algorithm combining ACO and SA. ACO params reuse the
+#                 ACO sweep ranges; sa_T0 is higher than hybrid_ga_sa's since
+#                 this phase also has to escape ACO's local optima.
 SWEEPS: dict[str, list[tuple[str, list]]] = {
     "ga": [
         ("p_mut",  [0.2, 0.3, 0.4, 0.5]),        # shifted up: was monotone at 0.3
@@ -59,9 +65,34 @@ SWEEPS: dict[str, list[tuple[str, list]]] = {
         ("T0",     [10.0, 50.0, 100.0, 200.0]),   # re-sweep with proper n range
         ("n_stall", [100, 250, 500, 1000]),
     ],
+    "hybrid_ga_sa": [
+        ("p_mut",   [0.2, 0.3, 0.4, 0.5]),
+        ("p_cx",    [0.6, 0.7, 0.8, 0.9]),
+        ("p_ind",   [0.01, 0.02, 0.05, 0.1]),
+        ("n_elite", [1, 3, 5, 10]),
+        ("t_size",  [3, 4, 5, 6]),
+        ("sa_T0",   [1.0, 5.0, 10.0, 20.0]),
+        ("sa_gamma", [0.90, 0.95, 0.99, 0.999]),
+        ("sa_refine_fraction", [0.05, 0.10, 0.15, 0.20]),
+        ("sa_steps_factor", [25, 50, 75, 100]),   # sa_steps = factor * n
+    ],
+    "hybrid_aco_sa": [
+        ("aco_ants",  [20, 30, 50, 75]),
+        ("aco_iter",  [30, 50, 75, 100]),
+        ("aco_alpha", [1.0, 1.5, 2.0, 2.5]),
+        ("aco_beta",  [3.0, 5.0, 7.0, 10.0]),
+        ("aco_rho",   [0.1, 0.2, 0.3, 0.5]),
+        ("sa_T0",     [5.0, 10.0, 20.0, 40.0]),
+        ("sa_gamma",  [0.90, 0.95, 0.99, 0.999]),
+        ("sa_restarts", [1, 2, 3, 5]),
+        ("sa_steps_factor", [50, 75, 100, 150]),  # sa_steps = factor * n
+    ],
 }
 
-_RUN: dict[str, object] = {"ga": ga.run, "gae": ga.run, "aco": aco.run, "sa": sa.run}
+_RUN: dict[str, object] = {
+    "ga": ga.run, "gae": ga.run, "aco": aco.run, "sa": sa.run,
+    "hybrid_ga_sa": hybrid_ga_sa.run, "hybrid_aco_sa": hybrid_aco_sa.run,
+}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -80,7 +111,16 @@ def _make_params(algo: str, varied_param: str, value: object) -> dict:
     params = dict(BASE_PARAMS[algo])
     if varied_param == "alpha_beta":
         params["alpha"], params["beta"] = value  # type: ignore[misc]
+    elif varied_param == "sa_steps_factor":
+        # Deferred: sa_steps depends on the actual graph size n, which isn't
+        # known here (this is called once per combo, before the n loop). The
+        # factor is resolved into an absolute sa_steps inside run_tune's n
+        # loop instead of being fixed to one hardcoded n here.
+        params["sa_steps_factor"] = value
     else:
+        # hybrid_aco_sa.run reads its ACO-phase params directly under
+        # aco_ants/aco_iter/aco_alpha/aco_beta/aco_rho (see hybrid_aco_sa.py),
+        # so these need no key translation — they fall through here.
         params[varied_param] = value
     return params
 
@@ -124,7 +164,7 @@ def run_tune(
     DSATUR, records the gap.
 
     Args:
-        algo: Algorithm to sweep (ga, gae, aco, sa).
+        algo: Algorithm to sweep (ga, gae, aco, sa, hybrid_ga_sa, hybrid_aco_sa).
         ns: Graph sizes to include.
         reps: Repetitions per (n, varied_param, param_value).
         out_path: Override output CSV path (default: auto-timestamped).
@@ -172,10 +212,17 @@ def run_tune(
             count = 0
 
             for n in ns:
+                # Resolve sa_steps_factor -> sa_steps against this n; a factor
+                # swept once can't be a fixed absolute step count across
+                # different graph sizes.
+                run_params = params
+                if "sa_steps_factor" in params:
+                    run_params = {**params, "sa_steps": params["sa_steps_factor"] * n}
+
                 for rep in range(reps):
                     G = make_random_graph(n, TUNE_P, seed=rep)
                     dsatur_k = len(set(dsatur(G).values()))
-                    result = run_fn(G, n, params, seed=rep)  # type: ignore[operator]
+                    result = run_fn(G, n, run_params, seed=rep)  # type: ignore[operator]
                     gap = result.k_used - dsatur_k
                     gaps[(varied_param, pval)].append(float(gap))
                     writer.writerow({
@@ -222,7 +269,10 @@ def _print_summary(algo: str, gaps: dict[tuple[str, str], list[float]]) -> None:
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments."""
     p = argparse.ArgumentParser(description="OFAT hyperparameter sweep.")
-    p.add_argument("--algo",  required=True, choices=["ga", "gae", "aco", "sa"])
+    p.add_argument(
+        "--algo", required=True,
+        choices=["ga", "gae", "aco", "sa", "hybrid_ga_sa", "hybrid_aco_sa"],
+    )
     p.add_argument("--reps",  type=int, default=10, help="Repetitions per setting")
     p.add_argument("--ns",    type=int, nargs="+", default=[40, 50, 60],
                    help="Graph sizes (space-separated)")

@@ -12,7 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from algorithms import aco, ga, sa
+from algorithms import aco, ga, hybrid_aco_sa, hybrid_ga_sa, sa
 from config import ALGO_PARAMS
 from graph_utils import brute_force_timed, dsatur, make_random_graph
 
@@ -24,7 +24,12 @@ _RUNNERS: list[tuple[str, object, str]] = [
     ("gae", ga.run,  "gae"),
     ("aco", aco.run, "aco"),
     ("sa",  sa.run,  "sa"),
+    ("hybrid_ga_sa",  hybrid_ga_sa.run,  "hybrid_ga_sa"),
+    ("hybrid_aco_sa", hybrid_aco_sa.run, "hybrid_aco_sa"),
 ]
+
+# Shortened labels for the per-graph progress line only (CSV rows keep full names).
+_DISPLAY_NAMES = {"hybrid_ga_sa": "h-ga-sa", "hybrid_aco_sa": "h-aco-sa"}
 
 _FIELDNAMES = [
     "algo", "n", "p", "rep", "seed",
@@ -154,13 +159,15 @@ def run_benchmark(
                                 result.k_used, result.violations,
                                 gap_ds, gap_bf, result.runtime_s,
                             ))
-                            progress.append(f"{algo_name}={result.k_used}({gap_ds:+d})")
+                            display_name = _DISPLAY_NAMES.get(algo_name, algo_name)
+                            progress.append(f"{display_name}={result.k_used}({gap_ds:+d})")
                         except Exception as exc:
                             logging.error(
                                 "%s n=%d p=%s rep=%d: %s", algo_name, n, p, rep, exc
                             )
                             writer.writerow(_nan_row(algo_name, n, p, rep, seed))
-                            progress.append(f"{algo_name}=err")
+                            display_name = _DISPLAY_NAMES.get(algo_name, algo_name)
+                            progress.append(f"{display_name}=err")
 
                     fh.flush()
                     done += 1
