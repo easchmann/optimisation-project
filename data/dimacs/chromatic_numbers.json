@@ -1,0 +1,16 @@
+{
+  "_comment": "Known chromatic numbers for DIMACS benchmark graphs (source: https://mat.tepper.cmu.edu/COLOR/instances.html). Key = filename stem, value = chi(G).",
+  "myciel3": 4,
+  "myciel4": 5,
+  "myciel5": 6,
+  "myciel6": 7,
+  "myciel7": 8,
+  "queen5_5": 5,
+  "queen6_6": 7,
+  "queen7_7": 7,
+  "queen8_8": 9,
+  "miles250": 8,
+  "miles500": 20,
+  "anna": 11,
+  "jean": 10
+}
