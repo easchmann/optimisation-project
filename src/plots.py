@@ -19,6 +19,7 @@ from graph_utils import dsatur, make_random_graph
 
 FIGURES_DIR = Path(__file__).parent.parent / "results" / "figures"
 BENCHMARK_DIR = Path(__file__).parent.parent / "results" / "benchmark"
+DIMACS_DIR = Path(__file__).parent.parent / "results" / "dimacs"
 DPI = 300
 
 # ── Consistent style per algorithm across all figures ─────────────────────────
@@ -224,16 +225,53 @@ def plot_density_sweep(
     _save(fig, "density_sweep.png", out_dir)
 
 
+# ── Figure 7: dimacs_gap ──────────────────────────────────────────────────────
+
+def plot_dimacs_gap(out_dir: Path) -> None:
+    """dimacs_gap.png: mean gap_true (k_used - true chi(G)) per algo per DIMACS instance."""
+    try:
+        csv_path = _latest_csv(DIMACS_DIR)
+    except FileNotFoundError:
+        print("Warning: no DIMACS results CSV found; skipping plot_dimacs_gap "
+              "(run src/dimacs_benchmark.py first)")
+        return
+
+    df = pd.read_csv(csv_path)
+    sub = df[df["algo"].isin(META_ALGOS)].copy()
+    sub["gap_true"] = pd.to_numeric(sub["gap_true"], errors="coerce")
+
+    order = sub[["instance", "n"]].drop_duplicates().sort_values("n")["instance"].tolist()
+    pivot = sub.pivot_table(index="instance", columns="algo", values="gap_true", aggfunc="mean")
+    pivot = pivot.reindex(order)
+
+    algos = [a for a in META_ALGOS if a in pivot.columns]
+    fig, ax = plt.subplots(figsize=(10, 5))
+    width = 0.8 / max(len(algos), 1)
+    x = range(len(pivot))
+    for i, algo in enumerate(algos):
+        offsets = [xi + i * width - 0.4 + width / 2 for xi in x]
+        ax.bar(offsets, pivot[algo], width=width, label=algo.upper(), color=ALGO_COLORS[algo])
+    ax.set_xticks(list(x))
+    ax.set_xticklabels(pivot.index, rotation=45, ha="right")
+    ax.axhline(0, color="black", linewidth=0.8)
+    ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=9)
+    _style(ax, "Gap vs. True Chromatic Number per DIMACS Instance",
+           "Instance", "Mean gap (k_used - χ(G))")
+    _save(fig, "dimacs_gap.png", out_dir)
+
+
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    """Generate all 6 figures. Convergence and density sweep are skippable."""
+    """Generate all 7 figures. Convergence, density sweep, and DIMACS are skippable."""
     p = argparse.ArgumentParser(description="Generate result figures.")
     p.add_argument("--csv", type=Path, default=None, help="Path to benchmark CSV")
     p.add_argument("--skip-convergence", action="store_true",
                    help="Skip the convergence experiment (saves ~15s)")
     p.add_argument("--skip-density", action="store_true",
                    help="Skip the density sweep (saves several minutes)")
+    p.add_argument("--skip-dimacs", action="store_true",
+                   help="Skip the DIMACS gap figure")
     args = p.parse_args()
 
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
@@ -249,6 +287,8 @@ def main() -> None:
         plot_convergence_n100(FIGURES_DIR)
     if not args.skip_density:
         plot_density_sweep(FIGURES_DIR)
+    if not args.skip_dimacs:
+        plot_dimacs_gap(FIGURES_DIR)
 
 
 if __name__ == "__main__":

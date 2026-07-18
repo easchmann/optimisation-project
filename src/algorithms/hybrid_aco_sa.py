@@ -45,22 +45,23 @@ def run(
         "aco_Q": 1.0,
         
         # SA refinement phase
-        "sa_steps": None,      # Will become 100*n at runtime
+        "sa_steps": None,      # Will become sa_steps_factor*n at runtime
+        "sa_steps_factor": 100,
         "sa_T0": 20.0,         # Higher temp for more exploration
         "sa_gamma": 0.99,
         "sa_restarts": 3,      # Number of SA restarts
     }
-    
+
     p = {**default_params, **params}
-    
+
     aco_iter: int = p["aco_iter"]
     aco_ants: int = p["aco_ants"]
     aco_alpha: float = p["aco_alpha"]
     aco_beta: float = p["aco_beta"]
     aco_rho: float = p["aco_rho"]
     aco_Q: float = p["aco_Q"]
-    
-    sa_steps: int = p["sa_steps"] if p["sa_steps"] is not None else 100 * len(G.nodes())
+
+    sa_steps: int = p["sa_steps"] if p["sa_steps"] is not None else p["sa_steps_factor"] * len(G.nodes())
     sa_T0: float = p["sa_T0"]
     sa_gamma: float = p["sa_gamma"]
     sa_restarts: int = p["sa_restarts"]
@@ -139,7 +140,8 @@ DEFAULT_PARAMS: dict = {
     "aco_beta": 5.0,
     "aco_rho": 0.2,
     "aco_Q": 1.0,
-    "sa_steps": None,      # 100*n at runtime
+    "sa_steps": None,      # resolved to sa_steps_factor*n at runtime
+    "sa_steps_factor": 100,
     "sa_T0": 20.0,
     "sa_gamma": 0.99,
     "sa_restarts": 3,

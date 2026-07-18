@@ -163,7 +163,8 @@ def run(
         k_max: Maximum number of colours (search space upper bound).
         params: Algorithm hyperparameters. Missing keys fall back to defaults.
             GA parameters: n_pop, p_cx, p_mut, p_ind, n_gen, n_elite, t_size, elitism
-            SA parameters: sa_steps (None → 50*n), sa_T0, sa_gamma, sa_refine_fraction
+            SA parameters: sa_steps (None → sa_steps_factor*n), sa_steps_factor,
+                sa_T0, sa_gamma, sa_refine_fraction
         seed: Random seed.
     
     Returns:
@@ -181,14 +182,15 @@ def run(
         "t_size": 5,
         "elitism": True,
         # SA refinement parameters
-        "sa_steps": None,  # resolved to 50*n at runtime
+        "sa_steps": None,        # resolved to sa_steps_factor*n at runtime
+        "sa_steps_factor": 50,
         "sa_T0": 5.0,
         "sa_gamma": 0.95,
         "sa_refine_fraction": 0.15,
     }
-    
+
     p = {**default_params, **params}
-    
+
     n_pop: int = p["n_pop"]
     p_cx: float = p["p_cx"]
     p_mut: float = p["p_mut"]
@@ -197,8 +199,8 @@ def run(
     n_elite: int = p["n_elite"]
     t_size: int = p["t_size"]
     elitism: bool = p["elitism"]
-    
-    sa_steps: int = p["sa_steps"] if p["sa_steps"] is not None else 50 * len(G.nodes())
+
+    sa_steps: int = p["sa_steps"] if p["sa_steps"] is not None else p["sa_steps_factor"] * len(G.nodes())
     sa_T0: float = p["sa_T0"]
     sa_gamma: float = p["sa_gamma"]
     sa_refine_fraction: float = p["sa_refine_fraction"]
@@ -320,7 +322,8 @@ DEFAULT_PARAMS: dict = {
     "n_elite": 3,
     "t_size": 5,
     "elitism": True,
-    "sa_steps": None,  # resolved to 50*n at runtime
+    "sa_steps": None,        # resolved to sa_steps_factor*n at runtime
+    "sa_steps_factor": 50,
     "sa_T0": 5.0,
     "sa_gamma": 0.95,
     "sa_refine_fraction": 0.15,
